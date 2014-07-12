@@ -10,25 +10,43 @@ module Vimbot
 
     def start
       return if @pid
-      @pid = fork { exec "#{command_prefix} --nofork -u #{vimrc} -U #{gvimrc}" }
+
+      system("start #{command_prefix} --nofork -u #{vimrc} -U #{gvimrc}")
+
       wait_until_up
+
+      # Get process id by hackily sleeping then grepping ps
+      sleep(6)
+      output = `ps -W -a | grep \\\\vim.exe`
+      match = output.split()[0].strip
+
+      @pid = match.to_i
+
+      print "using id = #{@pid}"
     end
 
     def stop
       return unless @pid
       remote_send "<Esc>:qall!<CR>"
-      Process.wait(@pid)
+
+      # this doesn't work on windows
+      #Process.wait(@pid)
       @pid = nil
     end
 
     def remote_send(command)
+      #print "Executing #{command_prefix} --remote-send #{command}"
       output, error = Open3.capture3 "#{command_prefix} --remote-send #{escape(command)}"
+      #print output
+      #print error
       raise InvalidInput unless error.empty?
       nil
     end
 
     def remote_expr(expression)
       output, error = Open3.capture3 "#{command_prefix} --remote-expr #{escape(expression)}"
+      #print output
+      #print error
       raise InvalidExpression unless error.empty?
       output.gsub(/\n$/, "")
     end
@@ -78,8 +96,12 @@ module Vimbot
       !(`#{binary} --help | grep -e --server`).empty?
     end
 
-    def escape(string)
-      Shellwords.escape(string)
+    #def escape(string)
+      #Shellwords.escape(string)
+    #end
+
+    def escape(cmdline)
+        '"' + cmdline.gsub(/\\(?=\\*\")/, "\\\\\\").gsub(/\"/, "\\\"").gsub(/\\$/, "\\\\\\").gsub("%", "%%") + '"'
     end
 
     def command_prefix
